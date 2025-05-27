@@ -1,0 +1,167 @@
+# EDR Agent 配置文件示例
+
+# 代理基础配置
+agent:
+  name: "edr-agent"
+  version: "1.0.0"
+  environment: "production"
+  data_dir: "/var/lib/edr"
+  pid_file: "/var/run/edr-agent.pid"
+  interval: "30s"
+
+# 日志配置
+logging:
+  level: "info"           # debug, info, warn, error, fatal, panic
+  format: "json"          # json, console, text
+  output: "/var/log/edr/agent.log"  # stdout, stderr, 或文件路径
+  max_size: 100           # MB
+  max_backups: 3
+  max_age: 28             # 天
+  compress: true
+
+# 监控配置
+monitoring:
+  # 进程监控
+  process:
+    enabled: true
+    interval: "5s"
+    buffer_size: 1000
+    whitelist: []           # 白名单进程（为空则监控所有）
+    blacklist:              # 黑名单进程
+      - "kthreadd"
+      - "ksoftirqd"
+      - "migration"
+      - "rcu_"
+      - "watchdog"
+
+  # 文件系统监控
+  filesystem:
+    enabled: true
+    watch_paths:            # 监控路径
+      - "/etc"
+      - "/bin"
+      - "/sbin"
+      - "/usr/bin"
+      - "/usr/sbin"
+      - "/home"
+      - "/tmp"
+      - "/var/tmp"
+    ignore_paths:           # 忽略路径
+      - "/proc"
+      - "/sys"
+      - "/dev"
+      - "/run"
+    events:                 # 监控事件类型
+      - "create"
+      - "modify"
+      - "delete"
+      - "move"
+    recursive: true
+
+  # 网络监控
+  network:
+    enabled: true
+    interfaces:             # 监控网络接口
+      - "eth0"
+      - "wlan0"
+      - "lo"
+    protocols:              # 监控协议
+      - "tcp"
+      - "udp"
+      - "icmp"
+    ports: []               # 特定端口（为空则监控所有）
+    buffer_size: 1000
+
+  # 系统调用监控
+  syscall:
+    enabled: false          # 需要特殊权限，默认禁用
+    syscalls:               # 监控的系统调用
+      - "execve"
+      - "open"
+      - "openat"
+      - "connect"
+      - "bind"
+      - "listen"
+    processes: []           # 特定进程（为空则监控所有）
+
+# 威胁检测配置
+detection:
+  enabled: true
+
+  # 规则引擎
+  rules:
+    enabled: true
+    rules_dir: "/etc/edr/rules"
+    rule_files: []          # 特定规则文件
+    auto_load: true
+
+  # IOC (威胁指标) 检测
+  ioc:
+    enabled: true
+    sources: []             # IOC数据源
+    update_interval: "24h"
+    cache_size: 10000
+
+  # 行为分析
+  behavioral:
+    enabled: true
+    window_size: "15m"      # 分析时间窗口
+    threshold: 0.8          # 异常阈值
+    baseline_file: "/etc/edr/baseline.json"
+
+  # 机器学习检测
+  ml:
+    enabled: false
+    model_path: "/etc/edr/models/threat_detection.model"
+    threshold: 0.7
+    features: []
+
+# 数据收集配置
+collection:
+  enabled: true
+  storage_path: "/var/lib/edr/data"
+  max_size: 1073741824      # 1GB
+  retention: "720h"         # 30天
+  compression: true
+
+# 事件响应配置
+response:
+  enabled: true
+  timeout: "5m"
+  dry_run: false            # 测试模式，不执行实际操作
+  actions: []               # 响应动作配置
+
+# 集成配置
+integration:
+  # SIEM集成
+  siem:
+    enabled: false
+    type: ""                # splunk, elasticsearch, etc.
+    endpoint: ""
+    api_key: ""
+    format: "json"
+
+  # 威胁情报集成
+  threat_intel:
+    enabled: false
+    sources: []
+    api_keys: {}
+    update_interval: "6h"
+
+  # 云平台集成
+  cloud:
+    enabled: false
+    provider: ""            # aws, azure, gcp
+    region: ""
+    credentials: {}
+
+# 报告配置
+reporting:
+  enabled: true
+  output_dir: "/var/lib/edr/reports"
+  format:                   # 报告格式
+    - "json"
+    - "html"
+  schedule: "0 0 * * *"     # Cron表达式，每天午夜
+  recipients: []            # 邮件接收者
+  retention: "2160h"        # 90天 
