@@ -1,0 +1,64 @@
+# Go编译生成的二进制文件和可执行文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+edr-agent
+simple_monitor
+time_anomaly_test
+*_test
+
+# Go特定的目录
+/vendor/
+/go.work
+
+# 日志文件
+*.log
+log.md
+
+# 配置文件，但保留示例
+config.yaml
+config.json
+!example-config.yaml
+!test-config.yaml
+
+# 临时文件和操作系统特定文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+*.swp
+*.swo
+.tmp*
+
+# IDE文件
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
+*.iml
+*.iws
+*.ipr
+
+# 依赖目录
+/bin/
+/pkg/mod/
+
+# 临时目录
+/tmp/
+/temp/
+/dist/
+
+# 覆盖率报告
+coverage.txt
+profile.out 
