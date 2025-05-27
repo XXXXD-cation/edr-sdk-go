@@ -68,11 +68,19 @@ type ProcessMonitorConfig struct {
 
 // FileSystemMonitorConfig 文件系统监控配置
 type FileSystemMonitorConfig struct {
-	Enabled     bool     `mapstructure:"enabled"`
-	WatchPaths  []string `mapstructure:"watch_paths"`
-	IgnorePaths []string `mapstructure:"ignore_paths"`
-	Events      []string `mapstructure:"events"`
-	Recursive   bool     `mapstructure:"recursive"`
+	Enabled               bool          `mapstructure:"enabled"`
+	WatchPaths            []string      `mapstructure:"watch_paths"`
+	RecursiveWatch        bool          `mapstructure:"recursive_watch"`
+	ExcludePaths          []string      `mapstructure:"exclude_paths"`
+	IncludeExt            []string      `mapstructure:"include_ext"`
+	ExcludeExt            []string      `mapstructure:"exclude_ext"`
+	MaxRecursionDepth     int           `mapstructure:"max_recursion_depth"`
+	BufferSize            int           `mapstructure:"buffer_size"`
+	HashAlgorithm         string        `mapstructure:"hash_algorithm"`
+	CalculateHash         bool          `mapstructure:"calculate_hash"`
+	MaxFileSize           int64         `mapstructure:"max_file_size"`
+	RenameMatchWindow     time.Duration `mapstructure:"rename_match_window"`
+	RenameCleanupInterval time.Duration `mapstructure:"rename_cleanup_interval"`
 }
 
 // NetworkMonitorConfig 网络监控配置
@@ -229,10 +237,18 @@ func setDefaults() {
 	viper.SetDefault("monitoring.process.blacklist", []string{})
 
 	viper.SetDefault("monitoring.filesystem.enabled", true)
-	viper.SetDefault("monitoring.filesystem.watch_paths", []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin"})
-	viper.SetDefault("monitoring.filesystem.ignore_paths", []string{"/proc", "/sys", "/dev"})
-	viper.SetDefault("monitoring.filesystem.events", []string{"create", "modify", "delete"})
-	viper.SetDefault("monitoring.filesystem.recursive", true)
+	viper.SetDefault("monitoring.filesystem.watch_paths", []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin", "/home"})
+	viper.SetDefault("monitoring.filesystem.recursive_watch", true)
+	viper.SetDefault("monitoring.filesystem.exclude_paths", []string{"/proc/", "/sys/", "/dev/", "/var/log/", "/tmp/."})
+	viper.SetDefault("monitoring.filesystem.include_ext", []string{})
+	viper.SetDefault("monitoring.filesystem.exclude_ext", []string{".log", ".swp", ".tmp"})
+	viper.SetDefault("monitoring.filesystem.max_recursion_depth", 10)
+	viper.SetDefault("monitoring.filesystem.buffer_size", 1000)
+	viper.SetDefault("monitoring.filesystem.hash_algorithm", "sha256")
+	viper.SetDefault("monitoring.filesystem.calculate_hash", true)
+	viper.SetDefault("monitoring.filesystem.max_file_size", 1024*1024*50)
+	viper.SetDefault("monitoring.filesystem.rename_match_window", "2s")
+	viper.SetDefault("monitoring.filesystem.rename_cleanup_interval", "5s")
 
 	viper.SetDefault("monitoring.network.enabled", true)
 	viper.SetDefault("monitoring.network.interfaces", []string{"eth0", "wlan0"})

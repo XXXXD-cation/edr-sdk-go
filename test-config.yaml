@@ -20,4 +20,26 @@ monitoring:
     blacklist:
       - "kthreadd"
       - "ksoftirqd"
-      - "migration" 
+      - "migration"
+  filesystem:
+    enabled: true
+    watch_paths:
+      - "/tmp/test_watch_dir1"
+      - "/tmp/test_watch_dir2"
+    recursive_watch: true
+    exclude_paths:
+      - "/tmp/test_watch_dir1/ignore_this_file.txt"
+      - "/tmp/test_watch_dir1/ignore_prefix/"
+      - "/proc/"
+    include_ext: []
+    exclude_ext:
+      - ".swp"
+      - ".~lock"
+      - ".tmp"
+      - ".swx"
+    buffer_size: 500
+    hash_algorithm: "sha1"
+    calculate_hash: true
+    max_file_size: 20971520
+    rename_match_window: "3s"
+    rename_cleanup_interval: "30s" 

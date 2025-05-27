@@ -33,6 +33,7 @@ type FileEvent struct {
 	GID       int       `json:"gid"`        // 文件所有者的组ID
 	Mode      os.FileMode `json:"mode"`     // 文件权限模式 (例如：0644)
 	Hash      string    `json:"hash,omitempty"` // 文件的哈希值 (如果计算了)
+	Error     error     `json:"error,omitempty"` // 事件相关的错误信息（如果有）
 }
 
 // FilesystemMonitorConfig 文件系统监控器的配置选项
