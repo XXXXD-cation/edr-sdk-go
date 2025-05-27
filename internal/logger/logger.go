@@ -27,6 +27,13 @@ type Logger interface {
 	Fatalf(template string, args ...interface{})
 	Panicf(template string, args ...interface{})
 	
+	Debugw(msg string, keysAndValues ...interface{})
+	Infow(msg string, keysAndValues ...interface{})
+	Warnw(msg string, keysAndValues ...interface{})
+	Errorw(msg string, keysAndValues ...interface{})
+	Fatalw(msg string, keysAndValues ...interface{})
+	Panicw(msg string, keysAndValues ...interface{})
+	
 	With(fields ...zap.Field) Logger
 	Named(name string) Logger
 	Sync() error
@@ -215,6 +222,36 @@ func (l *EDRLogger) Panicf(template string, args ...interface{}) {
 	l.sugar.Panicf(template, args...)
 }
 
+// Debugw 结构化调试日志
+func (l *EDRLogger) Debugw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Debugw(msg, keysAndValues...)
+}
+
+// Infow 结构化信息日志
+func (l *EDRLogger) Infow(msg string, keysAndValues ...interface{}) {
+	l.sugar.Infow(msg, keysAndValues...)
+}
+
+// Warnw 结构化警告日志
+func (l *EDRLogger) Warnw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Warnw(msg, keysAndValues...)
+}
+
+// Errorw 结构化错误日志
+func (l *EDRLogger) Errorw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Errorw(msg, keysAndValues...)
+}
+
+// Fatalw 结构化致命错误日志
+func (l *EDRLogger) Fatalw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Fatalw(msg, keysAndValues...)
+}
+
+// Panicw 结构化panic日志
+func (l *EDRLogger) Panicw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Panicw(msg, keysAndValues...)
+}
+
 // With 添加字段
 func (l *EDRLogger) With(fields ...zap.Field) Logger {
 	return &EDRLogger{
@@ -327,6 +364,36 @@ func Fatalf(template string, args ...interface{}) {
 // Panicf 全局格式化panic日志
 func Panicf(template string, args ...interface{}) {
 	GetLogger().Panicf(template, args...)
+}
+
+// Debugw 全局结构化调试日志
+func Debugw(msg string, keysAndValues ...interface{}) {
+	GetLogger().Debugw(msg, keysAndValues...)
+}
+
+// Infow 全局结构化信息日志
+func Infow(msg string, keysAndValues ...interface{}) {
+	GetLogger().Infow(msg, keysAndValues...)
+}
+
+// Warnw 全局结构化警告日志
+func Warnw(msg string, keysAndValues ...interface{}) {
+	GetLogger().Warnw(msg, keysAndValues...)
+}
+
+// Errorw 全局结构化错误日志
+func Errorw(msg string, keysAndValues ...interface{}) {
+	GetLogger().Errorw(msg, keysAndValues...)
+}
+
+// Fatalw 全局结构化致命错误日志
+func Fatalw(msg string, keysAndValues ...interface{}) {
+	GetLogger().Fatalw(msg, keysAndValues...)
+}
+
+// Panicw 全局结构化panic日志
+func Panicw(msg string, keysAndValues ...interface{}) {
+	GetLogger().Panicw(msg, keysAndValues...)
 }
 
 // With 全局添加字段
