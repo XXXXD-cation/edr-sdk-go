@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccnochch/edr-sdk-go/internal/logger"
+	"github.com/XXXXD-cation/edr-sdk-go/internal/logger"
 	"go.uber.org/zap"
 )
 

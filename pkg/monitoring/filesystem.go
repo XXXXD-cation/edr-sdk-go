@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ccnochch/edr-sdk-go/internal/logger"
+	"github.com/XXXXD-cation/edr-sdk-go/internal/logger"
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
 )

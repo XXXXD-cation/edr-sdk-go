@@ -74,14 +74,16 @@ edr-sdk-go/
 - Linux 操作系统
 - Root权限 (某些监控功能需要)
 
-### 安装SDK
+### 通过go get安装
+
 ```bash
-go get github.com/ccnochch/edr-sdk-go
+go get github.com/XXXXD-cation/edr-sdk-go
 ```
 
-### 构建示例
+### 通过git克隆
+
 ```bash
-git clone https://github.com/ccnochch/edr-sdk-go.git
+git clone https://github.com/XXXXD-cation/edr-sdk-go.git
 cd edr-sdk-go
 go build ./cmd/edr-agent
 go build ./cmd/edr-cli
@@ -98,8 +100,8 @@ import (
     "context"
     "log"
     
-    "github.com/ccnochch/edr-sdk-go/pkg/monitoring"
-    "github.com/ccnochch/edr-sdk-go/pkg/detection"
+    "github.com/XXXXD-cation/edr-sdk-go/pkg/monitoring"
+    "github.com/XXXXD-cation/edr-sdk-go/pkg/detection"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-module github.com/ccnochch/edr-sdk-go
+module github.com/XXXXD-cation/edr-sdk-go
 
 go 1.24.3
 

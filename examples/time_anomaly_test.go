@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ccnochch/edr-sdk-go/internal/logger"
-	"github.com/ccnochch/edr-sdk-go/pkg/monitoring"
+	"github.com/XXXXD-cation/edr-sdk-go/internal/logger"
+	"github.com/XXXXD-cation/edr-sdk-go/pkg/monitoring"
 	"go.uber.org/zap"
 )
 
