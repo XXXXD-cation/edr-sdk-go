@@ -9,6 +9,7 @@
 simple_monitor
 time_anomaly_test
 *_test
+network_monitor_example
 
 # Go特定的目录
 /vendor/
