@@ -6,7 +6,6 @@
 *.dylib
 *.test
 *.out
-edr-agent
 simple_monitor
 time_anomaly_test
 *_test
