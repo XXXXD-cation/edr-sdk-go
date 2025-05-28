@@ -68,20 +68,24 @@ const (
 // EBPFHandler manages the eBPF lifecycle for network monitoring.
 // It loads, attaches, and detaches eBPF programs, and reads events from maps.
 type EBPFHandler struct {
-	logger        *zap.Logger
-	config        config.NetworkMonitorConfig
-	bpfObjs       *network_bpfObjects // Corrected case: network_bpfObjects
-	links         []link.Link // To keep track of attached kprobes/tracepoints for cleanup
-	ringbufReader *ringbuf.Reader
+	logger          *zap.Logger
+	config          config.NetworkMonitorConfig
+	bpfObjs         *network_bpfObjects // Corrected case: network_bpfObjects
+	links           []link.Link         // To keep track of attached kprobes/tracepoints for cleanup
+	ringbufReader   *ringbuf.Reader
+	bootTimeEpochNs int64             // Nanoseconds from Unix epoch to system boot time
+	stopChan        chan struct{}       // To signal the event processing goroutine to stop
 }
 
 // NewEBPFHandler creates a new EBPFHandler.
-func NewEBPFHandler(logger *zap.Logger, cfg config.NetworkMonitorConfig) (*EBPFHandler, error) {
+func NewEBPFHandler(logger *zap.Logger, cfg config.NetworkMonitorConfig, bootTimeNs int64) (*EBPFHandler, error) {
 	logger.Info("Initializing eBPF handler for network monitor")
 
 	h := &EBPFHandler{
-		logger: logger.Named("ebpf-handler"),
-		config: cfg,
+		logger:          logger.Named("ebpf-handler"),
+		config:          cfg,
+		bootTimeEpochNs: bootTimeNs,
+		stopChan:        make(chan struct{}),
 	}
 
 	if err := h.loadAndAttachBPF(); err != nil {
@@ -194,13 +198,18 @@ func (h *EBPFHandler) convertBpfEventToTypedEvent(rawEvent *rawNetworkEventData)
 		commBytes[i] = byte(c)
 	}
 
+	// Adjust the timestamp using bootTimeEpochNs
+	absoluteTsNs := h.bootTimeEpochNs + int64(rawEvent.TimestampNs)
+	eventTimestamp := time.Unix(0, absoluteTsNs)
+
 	baseEvt := BaseEvent{
-		Timestamp: time.Unix(0, int64(rawEvent.TimestampNs)),
+		Timestamp: eventTimestamp, // Use the corrected, absolute timestamp
 		ProcessCtx: ProcessContext{
 			PID:  rawEvent.Pid,
 			Comm: string(commBytes),
 			UID:  rawEvent.Uid,
 			GID:  rawEvent.Gid,
+			// PPID, ExePath, Cmdline, StartTime, ExecutableHash would be populated by a process enricher later
 		},
 	}
 
