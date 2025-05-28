@@ -112,30 +112,52 @@ func (h *EBPFHandler) loadAndAttachBPF() error {
 	h.bpfObjs = &objs
 
 	// Attach kprobe for tcp_v4_connect
-	l4, err := link.Kprobe("tcp_v4_connect", h.bpfObjs.KprobeTcpV4Connect, nil) // Assumes direct access if fields are promoted
+	l4, err := link.Kprobe("tcp_v4_connect", h.bpfObjs.KprobeTcpV4Connect, nil) 
 	if err != nil {
 		h.logger.Error("Failed to attach kprobe to tcp_v4_connect", zap.Error(err))
-		// Consider not returning immediately, try to attach other probes if possible
-		// For now, let's return, but this could be made more resilient.
 		return fmt.Errorf("attaching tcp_v4_connect kprobe: %w", err)
 	}
 	h.links = append(h.links, l4)
 	h.logger.Info("Attached kprobe to tcp_v4_connect")
 
+	// Attach kretprobe for tcp_v4_connect
+	kret4, err := link.Kretprobe("tcp_v4_connect", h.bpfObjs.KretprobeTcpV4ConnectExit, nil)
+	if err != nil {
+		h.logger.Error("Failed to attach kretprobe to tcp_v4_connect", zap.Error(err))
+		l4.Close() // Clean up previous link
+		return fmt.Errorf("attaching tcp_v4_connect kretprobe: %w", err)
+	}
+	h.links = append(h.links, kret4)
+	h.logger.Info("Attached kretprobe to tcp_v4_connect")
+
+
 	// Attach kprobe for tcp_v6_connect
-	l6, err := link.Kprobe("tcp_v6_connect", h.bpfObjs.KprobeTcpV6Connect, nil) // Assumes direct access
+	l6, err := link.Kprobe("tcp_v6_connect", h.bpfObjs.KprobeTcpV6Connect, nil) 
 	if err != nil {
 		h.logger.Error("Failed to attach kprobe to tcp_v6_connect", zap.Error(err))
+		l4.Close(); kret4.Close() // Clean up previous links
 		return fmt.Errorf("attaching tcp_v6_connect kprobe: %w", err)
 	}
 	h.links = append(h.links, l6)
 	h.logger.Info("Attached kprobe to tcp_v6_connect")
 
-	// Initialize Ring Buffer reader
-	h.ringbufReader, err = ringbuf.NewReader(h.bpfObjs.Events) // Assumes direct access
+	// Attach kretprobe for tcp_v6_connect
+	kret6, err := link.Kretprobe("tcp_v6_connect", h.bpfObjs.KretprobeTcpV6ConnectExit, nil)
 	if err != nil {
-		h.logger.Error("Failed to create ringbuf reader", zap.Error(err))
-		return fmt.Errorf("creating ringbuf reader: %w", err)
+		h.logger.Error("Failed to attach kretprobe to tcp_v6_connect", zap.Error(err))
+		l4.Close(); kret4.Close(); l6.Close() // Clean up previous links
+		return fmt.Errorf("attaching tcp_v6_connect kretprobe: %w", err)
+	}
+	h.links = append(h.links, kret6)
+	h.logger.Info("Attached kretprobe to tcp_v6_connect")
+
+
+	// Initialize Ring Buffer reader for the 'events' map
+	h.ringbufReader, err = ringbuf.NewReader(h.bpfObjs.Events) 
+	if err != nil {
+		h.logger.Error("Failed to create ringbuf reader for events map", zap.Error(err))
+		l4.Close(); kret4.Close(); l6.Close(); kret6.Close() // Clean up all links
+		return fmt.Errorf("creating ringbuf reader for events map: %w", err)
 	}
 
 	h.logger.Info("BPF programs loaded and attached successfully")

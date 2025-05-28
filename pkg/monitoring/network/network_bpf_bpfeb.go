@@ -12,6 +12,21 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type network_bpfActiveConnectInfoT struct {
+	EntryTimestampNs uint64
+	Pid              uint32
+	Tgid             uint32
+	Uid              uint32
+	Gid              uint32
+	Comm             [16]int8
+	OriginalType     uint32
+	Dport            uint16
+	DaddrV6          [16]uint8
+	Family           uint8
+	_                [1]byte
+	SkPtrU64         uint64
+}
+
 // loadNetwork_bpf returns the embedded CollectionSpec for network_bpf.
 func loadNetwork_bpf() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_Network_bpfBytes)
@@ -54,15 +69,18 @@ type network_bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type network_bpfProgramSpecs struct {
-	KprobeTcpV4Connect *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v4_connect"`
-	KprobeTcpV6Connect *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v6_connect"`
+	KprobeTcpV4Connect        *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v4_connect"`
+	KprobeTcpV6Connect        *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v6_connect"`
+	KretprobeTcpV4ConnectExit *ebpf.ProgramSpec `ebpf:"kretprobe_tcp_v4_connect_exit"`
+	KretprobeTcpV6ConnectExit *ebpf.ProgramSpec `ebpf:"kretprobe_tcp_v6_connect_exit"`
 }
 
 // network_bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type network_bpfMapSpecs struct {
-	Events *ebpf.MapSpec `ebpf:"events"`
+	ActiveConnects *ebpf.MapSpec `ebpf:"active_connects"`
+	Events         *ebpf.MapSpec `ebpf:"events"`
 }
 
 // network_bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -91,11 +109,13 @@ func (o *network_bpfObjects) Close() error {
 //
 // It can be passed to loadNetwork_bpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type network_bpfMaps struct {
-	Events *ebpf.Map `ebpf:"events"`
+	ActiveConnects *ebpf.Map `ebpf:"active_connects"`
+	Events         *ebpf.Map `ebpf:"events"`
 }
 
 func (m *network_bpfMaps) Close() error {
 	return _Network_bpfClose(
+		m.ActiveConnects,
 		m.Events,
 	)
 }
@@ -110,14 +130,18 @@ type network_bpfVariables struct {
 //
 // It can be passed to loadNetwork_bpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type network_bpfPrograms struct {
-	KprobeTcpV4Connect *ebpf.Program `ebpf:"kprobe_tcp_v4_connect"`
-	KprobeTcpV6Connect *ebpf.Program `ebpf:"kprobe_tcp_v6_connect"`
+	KprobeTcpV4Connect        *ebpf.Program `ebpf:"kprobe_tcp_v4_connect"`
+	KprobeTcpV6Connect        *ebpf.Program `ebpf:"kprobe_tcp_v6_connect"`
+	KretprobeTcpV4ConnectExit *ebpf.Program `ebpf:"kretprobe_tcp_v4_connect_exit"`
+	KretprobeTcpV6ConnectExit *ebpf.Program `ebpf:"kretprobe_tcp_v6_connect_exit"`
 }
 
 func (p *network_bpfPrograms) Close() error {
 	return _Network_bpfClose(
 		p.KprobeTcpV4Connect,
 		p.KprobeTcpV6Connect,
+		p.KretprobeTcpV4ConnectExit,
+		p.KretprobeTcpV6ConnectExit,
 	)
 }
 
