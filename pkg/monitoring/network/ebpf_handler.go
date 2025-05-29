@@ -60,6 +60,8 @@ const (
 	eventTypeUnknown      uint32 = 0 // Corresponds to EVENT_UNKNOWN
 	eventTypeTCPConnectV4 uint32 = 1 // Corresponds to EVENT_TCP_CONNECT_V4
 	eventTypeTCPConnectV6 uint32 = 2 // Corresponds to EVENT_TCP_CONNECT_V6
+	eventTypeUDPSendV4    uint32 = 3 // Corresponds to EVENT_UDP_SEND_V4
+	eventTypeUDPSendV6    uint32 = 4 // Corresponds to EVENT_UDP_SEND_V6
 	// Add other event types here as they are defined in C and handled.
 )
 
@@ -151,14 +153,35 @@ func (h *EBPFHandler) loadAndAttachBPF() error {
 	h.links = append(h.links, kret6)
 	h.logger.Info("Attached kretprobe to tcp_v6_connect")
 
+	// Attach kprobe for udp_sendmsg
+	ludp4, err := link.Kprobe("udp_sendmsg", h.bpfObjs.KprobeUdpSendmsg, nil)
+	if err != nil {
+		h.logger.Error("Failed to attach kprobe to udp_sendmsg", zap.Error(err))
+		// Consider a more robust cleanup strategy for partial failures
+		h.cleanupLinks() // cleanup all previous links
+		return fmt.Errorf("attaching udp_sendmsg kprobe: %w", err)
+	}
+	h.links = append(h.links, ludp4)
+	h.logger.Info("Attached kprobe to udp_sendmsg")
+
+	// Attach kprobe for udpv6_sendmsg
+	ludp6, err := link.Kprobe("udpv6_sendmsg", h.bpfObjs.KprobeUdpv6Sendmsg, nil)
+	if err != nil {
+		h.logger.Error("Failed to attach kprobe to udpv6_sendmsg", zap.Error(err))
+		h.cleanupLinks()
+		return fmt.Errorf("attaching udpv6_sendmsg kprobe: %w", err)
+	}
+	h.links = append(h.links, ludp6)
+	h.logger.Info("Attached kprobe to udpv6_sendmsg")
 
 	// Initialize Ring Buffer reader for the 'events' map
-	h.ringbufReader, err = ringbuf.NewReader(h.bpfObjs.Events) 
+	rd, err := ringbuf.NewReader(h.bpfObjs.Events) // Corrected: use new variable name 'rd'
 	if err != nil {
 		h.logger.Error("Failed to create ringbuf reader for events map", zap.Error(err))
-		l4.Close(); kret4.Close(); l6.Close(); kret6.Close() // Clean up all links
+		h.cleanupLinks() // Use the helper function to clean up all accumulated links
 		return fmt.Errorf("creating ringbuf reader for events map: %w", err)
 	}
+	h.ringbufReader = rd // Assign to struct field after successful creation
 
 	h.logger.Info("BPF programs loaded and attached successfully")
 	return nil
@@ -248,36 +271,52 @@ func (h *EBPFHandler) convertBpfEventToTypedEvent(rawEvent *rawNetworkEventData)
 		// For IPv4-mapped IPv6, net.IP.To4() will return a non-nil IPv4 address
 		if ip4 := net.IP(rawEvent.SaddrV6[:]).To4(); ip4 != nil {
 			connInfo.LocalAddr = ip4.String()
+		} else {
+			connInfo.LocalAddr = net.IP(rawEvent.SaddrV6[:]).String() // Should be 0.0.0.0 if it's truly an IPv4 mapped one that's all zeros before the map part
 		}
 		if ip4 := net.IP(rawEvent.DaddrV6[:]).To4(); ip4 != nil {
 			connInfo.RemoteAddr = ip4.String()
+		} else {
+			connInfo.RemoteAddr = net.IP(rawEvent.DaddrV6[:]).String()
 		}
 	case 10: // AF_INET6 defined as 10 in C code
 		connInfo.SAFamily = "AF_INET6"
+		// For IPv6, we use the full address directly.
+		connInfo.LocalAddr = net.IP(rawEvent.SaddrV6[:]).String()
+		connInfo.RemoteAddr = net.IP(rawEvent.DaddrV6[:]).String()
 	default:
 		connInfo.SAFamily = "UNKNOWN"
 	}
 
-	switch rawEvent.Protocol { // Assuming IPPROTO_TCP = 6, IPPROTO_UDP = 17 (from C code)
-	case 6: // Placeholder for IPPROTO_TCP
+	switch rawEvent.Protocol {
+	case 6: // IPPROTO_TCP defined as 6
 		connInfo.Protocol = "TCP"
-	// case 17: // Placeholder for IPPROTO_UDP
-	// 	connInfo.Protocol = "UDP"
+	case 17: // IPPROTO_UDP defined as 17
+		connInfo.Protocol = "UDP"
 	default:
-		connInfo.Protocol = "UNKNOWN"
+		connInfo.Protocol = fmt.Sprintf("Unknown (%d)", rawEvent.Protocol)
 	}
 
 	// Determine the event type based on rawEvent.Type
-	switch rawEvent.Type { 
+	switch rawEvent.Type {
 	case eventTypeTCPConnectV4, eventTypeTCPConnectV6:
 		baseEvt.Type = EventTypeTCPConnect
 		tcpEvent := &TCPEvent{
 			BaseEvent:  baseEvt,
 			Connection: connInfo,
 		}
+		// Further TCP specific enrichment (like SNI) would happen later if applicable.
 		return tcpEvent
+	case eventTypeUDPSendV4, eventTypeUDPSendV6:
+		baseEvt.Type = EventTypeUDPSend
+		udpEvent := &UDPEvent{
+			BaseEvent:  baseEvt,
+			Connection: connInfo,
+		}
+		return udpEvent
+	// Add cases for other event types (TCPAccept, TCPClose, UDPRecv, etc.) here.
 	default:
-		h.logger.Debug("Unknown BPF event type received", zap.Uint32("rawEventTypeEnum", rawEvent.Type))
+		h.logger.Warn("Unknown or unhandled BPF event type", zap.Uint32("rawEventType", rawEvent.Type))
 		return nil
 	}
 }
@@ -313,4 +352,14 @@ func (h *EBPFHandler) Stop() {
 		h.logger.Info("Closed BPF objects")
 	}
 	h.logger.Info("eBPF handler stopped")
+}
+
+// cleanupLinks is a helper function to clean up all links in case of partial failure
+func (h *EBPFHandler) cleanupLinks() {
+	for _, l := range h.links {
+		if err := l.Close(); err != nil {
+			h.logger.Warn("Failed to close eBPF link", zap.Error(err))
+		}
+	}
+	h.links = nil
 } 

@@ -71,6 +71,8 @@ type network_bpfSpecs struct {
 type network_bpfProgramSpecs struct {
 	KprobeTcpV4Connect        *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v4_connect"`
 	KprobeTcpV6Connect        *ebpf.ProgramSpec `ebpf:"kprobe_tcp_v6_connect"`
+	KprobeUdpSendmsg          *ebpf.ProgramSpec `ebpf:"kprobe_udp_sendmsg"`
+	KprobeUdpv6Sendmsg        *ebpf.ProgramSpec `ebpf:"kprobe_udpv6_sendmsg"`
 	KretprobeTcpV4ConnectExit *ebpf.ProgramSpec `ebpf:"kretprobe_tcp_v4_connect_exit"`
 	KretprobeTcpV6ConnectExit *ebpf.ProgramSpec `ebpf:"kretprobe_tcp_v6_connect_exit"`
 }
@@ -132,6 +134,8 @@ type network_bpfVariables struct {
 type network_bpfPrograms struct {
 	KprobeTcpV4Connect        *ebpf.Program `ebpf:"kprobe_tcp_v4_connect"`
 	KprobeTcpV6Connect        *ebpf.Program `ebpf:"kprobe_tcp_v6_connect"`
+	KprobeUdpSendmsg          *ebpf.Program `ebpf:"kprobe_udp_sendmsg"`
+	KprobeUdpv6Sendmsg        *ebpf.Program `ebpf:"kprobe_udpv6_sendmsg"`
 	KretprobeTcpV4ConnectExit *ebpf.Program `ebpf:"kretprobe_tcp_v4_connect_exit"`
 	KretprobeTcpV6ConnectExit *ebpf.Program `ebpf:"kretprobe_tcp_v6_connect_exit"`
 }
@@ -140,6 +144,8 @@ func (p *network_bpfPrograms) Close() error {
 	return _Network_bpfClose(
 		p.KprobeTcpV4Connect,
 		p.KprobeTcpV6Connect,
+		p.KprobeUdpSendmsg,
+		p.KprobeUdpv6Sendmsg,
 		p.KretprobeTcpV4ConnectExit,
 		p.KretprobeTcpV6ConnectExit,
 	)

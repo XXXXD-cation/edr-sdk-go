@@ -24,6 +24,8 @@ typedef enum {
     EVENT_UNKNOWN = 0,
     EVENT_TCP_CONNECT_V4 = 1,
     EVENT_TCP_CONNECT_V6 = 2,
+    EVENT_UDP_SEND_V4 = 3, // New UDP event type
+    EVENT_UDP_SEND_V6 = 4, // New UDP event type
     // EVENT_TCP_ACCEPT_V4 = 3, // Placeholder for future
     // EVENT_TCP_ACCEPT_V6 = 4, // Placeholder for future
     // EVENT_TCP_CLOSE = 5,     // Placeholder for future
@@ -43,7 +45,7 @@ typedef struct {
     u8 saddr_v6[16];
     u8 daddr_v6[16];
     u8 family;   // AF_INET or AF_INET6
-    u8 protocol; // IPPROTO_TCP, IPPROTO_UDP (currently only TCP)
+    u8 protocol; // IPPROTO_TCP, IPPROTO_UDP
 } network_event_data_t;
 
 // NEW: Structure to store info from kprobe to kretprobe
@@ -245,6 +247,121 @@ int kretprobe_tcp_v6_connect_exit(struct pt_regs *ctx) {
     // bpf_printk("kretprobe_tcp_v6_connect_exit: sk_after_cast: %p, ret_value_after_cast: %d\\n", sk_from_regs, ret);
 
     return handle_tcp_connect_exit(ret); // Pass only ret_val
+}
+
+// 偏移量常量定义，避免使用offsetof宏
+#define SOCKADDR_IN_SIN_PORT_OFFSET 2
+#define SOCKADDR_IN_SIN_ADDR_OFFSET 4
+#define SOCKADDR_IN6_SIN6_PORT_OFFSET 2
+#define SOCKADDR_IN6_SIN6_ADDR_OFFSET 8
+
+// Kprobe for udp_sendmsg
+SEC("kprobe/udp_sendmsg")
+int kprobe_udp_sendmsg(struct pt_regs *ctx) {
+    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+    struct msghdr *msg_param = (struct msghdr *)PT_REGS_PARM2(ctx);
+
+    bpf_printk("kprobe_udp_sendmsg: triggered\n");
+
+    if (!sk || !msg_param) {
+        bpf_printk("kprobe_udp_sendmsg: sk or msg_param is NULL. sk: %p, msg_param: %p\n", sk, msg_param);
+        return 0;
+    }
+
+    struct msghdr local_msg = {};
+    if (bpf_probe_read_kernel(&local_msg, sizeof(local_msg), msg_param) != 0) {
+        bpf_printk("kprobe_udp_sendmsg: failed to read msghdr from kernel\n");
+        return 0;
+    }
+    void *msg_name_ptr = local_msg.msg_name;
+    unsigned int addr_len = local_msg.msg_namelen;
+    bpf_printk("kprobe_udp_sendmsg: msg_param=%p, msg_name_ptr=%p, addr_len=%u\n", msg_param, msg_name_ptr, addr_len);
+    if (!msg_name_ptr) {
+        bpf_printk("kprobe_udp_sendmsg: msg_param->msg_name is NULL after read\n");
+        return 0;
+    }
+    if (addr_len < sizeof(struct sockaddr_in)) {
+        bpf_printk("kprobe_udp_sendmsg: msg_namelen too small: %u\n", addr_len);
+        return 0;
+    }
+    struct sockaddr_in sa_in = {};
+    int user_ret = bpf_probe_read_user(&sa_in, sizeof(sa_in), msg_name_ptr);
+    if (user_ret != 0) {
+        bpf_printk("kprobe_udp_sendmsg: bpf_probe_read_user failed (%d), try kernel\n", user_ret);
+        int kern_ret = bpf_probe_read_kernel(&sa_in, sizeof(sa_in), msg_name_ptr);
+        if (kern_ret != 0) {
+            bpf_printk("kprobe_udp_sendmsg: bpf_probe_read_kernel also failed (%d)\n", kern_ret);
+            return 0;
+        }
+    }
+    bpf_printk("kprobe_udp_sendmsg: dport=%u, daddr=0x%x\n", bpf_ntohs(sa_in.sin_port), sa_in.sin_addr.s_addr);
+
+    // 写入UDP事件到ringbuf
+    network_event_data_t *event_data;
+    event_data = bpf_ringbuf_reserve(&events, sizeof(*event_data), 0);
+    if (!event_data) {
+        bpf_printk("kprobe_udp_sendmsg: failed to reserve ringbuf\n");
+        return 0;
+    }
+    event_data->timestamp_ns = bpf_ktime_get_ns();
+    u64 id = bpf_get_current_pid_tgid();
+    event_data->pid = id >> 32;
+    event_data->tgid = id & 0xFFFFFFFF;
+    u64 uid_gid = bpf_get_current_uid_gid();
+    event_data->uid = uid_gid & 0xFFFFFFFF;
+    event_data->gid = uid_gid >> 32;
+    bpf_get_current_comm(&event_data->comm, sizeof(event_data->comm));
+    event_data->type = EVENT_UDP_SEND_V4;
+    event_data->family = AF_INET;
+    event_data->protocol = IPPROTO_UDP;
+    event_data->sport = 0; // 可选：可从sk读取
+    event_data->dport = sa_in.sin_port;
+    __builtin_memset(event_data->saddr_v6, 0, 16);
+    __builtin_memset(event_data->daddr_v6, 0, 16);
+    event_data->daddr_v6[10] = 0xff;
+    event_data->daddr_v6[11] = 0xff;
+    *((u32 *)(&event_data->daddr_v6[12])) = sa_in.sin_addr.s_addr;
+    bpf_ringbuf_submit(event_data, 0);
+    bpf_printk("kprobe_udp_sendmsg: event submitted to ringbuf\n");
+    return 0;
+}
+
+SEC("kprobe/udpv6_sendmsg")
+int kprobe_udpv6_sendmsg(struct pt_regs *ctx) {
+    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+    struct msghdr *msg_param = (struct msghdr *)PT_REGS_PARM2(ctx);
+
+    bpf_printk("kprobe_udpv6_sendmsg: triggered\n");
+
+    if (!sk || !msg_param) {
+        bpf_printk("kprobe_udpv6_sendmsg: sk or msg_param is NULL. sk: %p, msg_param: %p\n", sk, msg_param);
+        return 0;
+    }
+
+    struct msghdr local_msg = {};
+    if (bpf_probe_read_kernel(&local_msg, sizeof(local_msg), msg_param) != 0) {
+        bpf_printk("kprobe_udpv6_sendmsg: failed to read msghdr from kernel\n");
+        return 0;
+    }
+    void *msg_name_ptr = local_msg.msg_name;
+    unsigned int addr_len = local_msg.msg_namelen;
+    if (!msg_name_ptr) {
+        bpf_printk("kprobe_udpv6_sendmsg: msg_param->msg_name is NULL after read\n");
+        return 0;
+    }
+    if (addr_len < sizeof(struct sockaddr_in6)) {
+        bpf_printk("kprobe_udpv6_sendmsg: msg_namelen too small: %u\n", addr_len);
+        return 0;
+    }
+    struct sockaddr_in6 sa_in6 = {};
+    if (bpf_probe_read_user(&sa_in6, sizeof(sa_in6), msg_name_ptr) != 0) {
+        bpf_printk("kprobe_udpv6_sendmsg: failed to read sockaddr_in6 from user\n");
+        return 0;
+    }
+    bpf_printk("kprobe_udpv6_sendmsg: dport=%u, daddr6=%x:%x:%x:%x\n", bpf_ntohs(sa_in6.sin6_port),
+        sa_in6.sin6_addr.in6_u.u6_addr32[0], sa_in6.sin6_addr.in6_u.u6_addr32[1],
+        sa_in6.sin6_addr.in6_u.u6_addr32[2], sa_in6.sin6_addr.in6_u.u6_addr32[3]);
+    return 0;
 }
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL"; 

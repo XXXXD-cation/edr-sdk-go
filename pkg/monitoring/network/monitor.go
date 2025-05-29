@@ -135,61 +135,15 @@ func (m *Monitor) Stop() {
 
 // handleRawEvent is a callback function passed to the EBPFHandler.
 // It receives raw event data, enriches it, filters it, and sends it to the event channel.
-func (m *Monitor) handleRawEvent(eventData interface{}) {
-	// Type assert the event data to its concrete type
-	switch event := eventData.(type) {
+func (m *Monitor) handleRawEvent(event interface{}) {
+	switch evt := event.(type) {
 	case *TCPEvent:
-		m.logger.Debug("Received TCP connect event from eBPF handler",
-			zap.String("type", string(event.Type)),
-			zap.Uint32("pid", event.ProcessCtx.PID),
-			zap.String("comm", event.ProcessCtx.Comm),
-			zap.String("s_addr", event.Connection.LocalAddr),
-			zap.Uint16("s_port", event.Connection.LocalPort),
-			zap.String("d_addr", event.Connection.RemoteAddr),
-			zap.Uint16("d_port", event.Connection.RemotePort),
-			zap.String("sa_family", event.Connection.SAFamily),
-		)
-
-		// TODO: Enrich event with full process context using m.processQuerier
-		// Example: fullCtx, err := m.processQuerier.GetProcessContext(event.ProcessCtx.PID)
-		// if err == nil {
-		//    event.ProcessCtx = fullCtx
-		// } else {
-		//    m.logger.Warn("Failed to get full process context", zap.Uint32("pid", event.ProcessCtx.PID), zap.Error(err))
-		// }
-
-		// TODO: Apply filters based on m.config
-		// if shouldFilter(event, m.config) {
-		// 	 m.logger.Debug("Event filtered", zap.Any("event", event))
-		// 	 return
-		// }
-
-		// Send the processed event to the main event channel
-		select {
-		case m.eventChannel <- event:
-			m.logger.Debug("Sent TCPEvent to main channel")
-		case <-m.ctx.Done():
-			m.logger.Info("Context done, not sending event to main channel")
-			return
-		default:
-			// This case can happen if the eventChannel is full. 
-			// Consider how to handle this: drop, log, or block.
-			m.logger.Warn("Main event channel is full, dropping TCPEvent", zap.Uint32("pid", event.ProcessCtx.PID))
-		}
-
-	// case *UDPEvent:
-	// 	 // Handle UDP events similarly
-	// 	 m.logger.Debug("Received UDP event", zap.Any("event", event))
-	// 	 // ... enrichment, filtering, sending ...
-	// 	 m.eventChannel <- event
-
-	// case *DNSEvent:
-	// 	 // Handle DNS events similarly
-	// 	 m.logger.Debug("Received DNS event", zap.Any("event", event))
-	// 	 // ... enrichment, filtering, sending ...
-	// 	 m.eventChannel <- event
-
+		m.logger.Debug("Received TCP connect event from eBPF handler", zap.Any("type", evt.Type), zap.Any("pid", evt.ProcessCtx.PID), zap.Any("comm", evt.ProcessCtx.Comm), zap.Any("s_addr", evt.Connection.LocalAddr), zap.Any("s_port", evt.Connection.LocalPort), zap.Any("d_addr", evt.Connection.RemoteAddr), zap.Any("d_port", evt.Connection.RemotePort), zap.Any("sa_family", evt.Connection.SAFamily))
+		m.eventChannel <- evt
+	case *UDPEvent:
+		m.logger.Debug("Received UDP send event from eBPF handler", zap.Any("type", evt.Type), zap.Any("pid", evt.ProcessCtx.PID), zap.Any("comm", evt.ProcessCtx.Comm), zap.Any("s_addr", evt.Connection.LocalAddr), zap.Any("s_port", evt.Connection.LocalPort), zap.Any("d_addr", evt.Connection.RemoteAddr), zap.Any("d_port", evt.Connection.RemotePort), zap.Any("sa_family", evt.Connection.SAFamily))
+		m.eventChannel <- evt
 	default:
-		m.logger.Warn("Received unknown event type in handleRawEvent", zap.Any("eventData", eventData))
+		m.logger.Warn("Received unknown event type in handleRawEvent", zap.Any("eventData", event))
 	}
 } 
