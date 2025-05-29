@@ -275,26 +275,22 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx) {
     }
     void *msg_name_ptr = local_msg.msg_name;
     unsigned int addr_len = local_msg.msg_namelen;
-    bpf_printk("kprobe_udp_sendmsg: msg_param=%p, msg_name_ptr=%p, addr_len=%u\n", msg_param, msg_name_ptr, addr_len);
-    if (!msg_name_ptr) {
-        bpf_printk("kprobe_udp_sendmsg: msg_param->msg_name is NULL after read\n");
-        return 0;
-    }
-    if (addr_len < sizeof(struct sockaddr_in)) {
-        bpf_printk("kprobe_udp_sendmsg: msg_namelen too small: %u\n", addr_len);
-        return 0;
-    }
+
+    u16 dport = 0;
+    u32 daddr = 0;
+    bool got_dst = false;
     struct sockaddr_in sa_in = {};
-    int user_ret = bpf_probe_read_user(&sa_in, sizeof(sa_in), msg_name_ptr);
-    if (user_ret != 0) {
-        bpf_printk("kprobe_udp_sendmsg: bpf_probe_read_user failed (%d), try kernel\n", user_ret);
-        int kern_ret = bpf_probe_read_kernel(&sa_in, sizeof(sa_in), msg_name_ptr);
-        if (kern_ret != 0) {
-            bpf_printk("kprobe_udp_sendmsg: bpf_probe_read_kernel also failed (%d)\n", kern_ret);
-            return 0;
+    if (msg_name_ptr && addr_len >= sizeof(struct sockaddr_in)) {
+        if (bpf_probe_read_user(&sa_in, sizeof(sa_in), msg_name_ptr) == 0) {
+            dport = sa_in.sin_port;
+            daddr = sa_in.sin_addr.s_addr;
+            got_dst = true;
         }
     }
-    bpf_printk("kprobe_udp_sendmsg: dport=%u, daddr=0x%x\n", bpf_ntohs(sa_in.sin_port), sa_in.sin_addr.s_addr);
+    if (!got_dst) {
+        BPF_CORE_READ_INTO(&dport, sk, __sk_common.skc_dport);
+        BPF_CORE_READ_INTO(&daddr, sk, __sk_common.skc_daddr);
+    }
 
     // 写入UDP事件到ringbuf
     network_event_data_t *event_data;
@@ -312,17 +308,34 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx) {
     event_data->gid = uid_gid >> 32;
     bpf_get_current_comm(&event_data->comm, sizeof(event_data->comm));
     event_data->type = EVENT_UDP_SEND_V4;
-    event_data->family = AF_INET;
-    event_data->protocol = IPPROTO_UDP;
-    event_data->sport = 0; // 可选：可从sk读取
-    event_data->dport = sa_in.sin_port;
-    __builtin_memset(event_data->saddr_v6, 0, 16);
+    event_data->dport = dport;
     __builtin_memset(event_data->daddr_v6, 0, 16);
     event_data->daddr_v6[10] = 0xff;
     event_data->daddr_v6[11] = 0xff;
-    *((u32 *)(&event_data->daddr_v6[12])) = sa_in.sin_addr.s_addr;
+    *((u32 *)(&event_data->daddr_v6[12])) = daddr;
+    event_data->family = AF_INET;
+    event_data->protocol = IPPROTO_UDP;
+
+    // 源地址和端口
+    u16 sport = 0;
+    u32 saddr = 0;
+    u16 family = 0;
+    BPF_CORE_READ_INTO(&family, sk, __sk_common.skc_family);
+    if (family == AF_INET) {
+        BPF_CORE_READ_INTO(&sport, sk, __sk_common.skc_num);
+        BPF_CORE_READ_INTO(&saddr, sk, __sk_common.skc_rcv_saddr);
+        event_data->sport = bpf_htons(sport);
+        __builtin_memset(event_data->saddr_v6, 0, 16);
+        event_data->saddr_v6[10] = 0xff;
+        event_data->saddr_v6[11] = 0xff;
+        *((u32 *)(&event_data->saddr_v6[12])) = saddr;
+    } else if (family == AF_INET6) {
+        BPF_CORE_READ_INTO(&sport, sk, __sk_common.skc_num);
+        BPF_CORE_READ_INTO(&event_data->saddr_v6, sk, __sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
+        event_data->sport = bpf_htons(sport);
+    }
+
     bpf_ringbuf_submit(event_data, 0);
-    bpf_printk("kprobe_udp_sendmsg: event submitted to ringbuf\n");
     return 0;
 }
 
